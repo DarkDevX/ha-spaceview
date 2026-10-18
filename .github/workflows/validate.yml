@@ -7,16 +7,29 @@ on:
     types:
       - published
   workflow_dispatch:
+    inputs:
+      version:
+        description: Stable MAJOR.MINOR.PATCH version matching the public manifest on main
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 jobs:
   validate:
-    if: github.event_name != 'release'
+    if: github.event_name != 'release' && github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.13"
+      - name: Test deterministic release builder
+        run: python -m unittest scripts.test_build_spaceview
       - name: HACS validation
         uses: hacs/action@1ebf01c408f29afcb6406bd431bc98fd8cbb15aa # main
         with:
@@ -25,63 +38,180 @@ jobs:
         uses: home-assistant/actions/hassfest@cd6f3635a740c84d8a14f6121a90068b8ece6bf6 # master
 
   prepare-release:
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
+    outputs:
+      release_tag: ${{ steps.package.outputs.release_tag }}
+      release_version: ${{ steps.package.outputs.release_version }}
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || format('v{0}', github.event.inputs.version) }}
+      RELEASE_VERSION: ${{ github.event.inputs.version || github.event.release.tag_name }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Reject manual dispatch outside public main before checking out code
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_REF: ${{ github.ref }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$DISPATCH_REF" != "refs/heads/main" ]; then
+            echo "::error::Release dispatch is allowed only from public main."
+            exit 1
+          fi
+      - name: Check out the event source without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.13"
+      - name: Test release builder
+        run: python -m unittest scripts.test_build_spaceview
       - name: Home Assistant hassfest
         uses: home-assistant/actions/hassfest@cd6f3635a740c84d8a14f6121a90068b8ece6bf6 # master
-      - name: Build deterministic flat HACS package
+      - name: Verify the exact public main source, version, release state, and HACS ZIP
+        id: package
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+          RELEASE_VERSION: ${{ env.RELEASE_VERSION }}
+        run: python scripts/build_spaceview.py prepare
+      - name: Store the verified public HACS ZIP
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: spaceview-release-package
+          path: spaceview.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-release:
+    needs: prepare-release
+    if: needs.prepare-release.result == 'success'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: spaceview-release-${{ github.event.release.tag_name || format('v{0}', github.event.inputs.version) }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    env:
+      EVENT_NAME: ${{ github.event_name }}
+      EVENT_REF: ${{ github.ref }}
+      EVENT_SHA: ${{ github.sha }}
+      EVENT_REPOSITORY: ${{ github.repository }}
+      RELEASE_TAG: ${{ needs.prepare-release.outputs.release_tag }}
+      RELEASE_VERSION: ${{ needs.prepare-release.outputs.release_version }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download the ZIP verified in the read-only job
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: spaceview-release-package
+      - name: Recheck public main and release state before using write permission
         run: |
-          python3 - <<'PY'
+          python - <<'PY'
           import json
           import os
-          from pathlib import Path
-          from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
+          import re
+          import urllib.error
+          import urllib.parse
+          import urllib.request
 
-          component = Path("custom_components/neonplan3d")
-          manifest_path = component / "manifest.json"
-          if not manifest_path.is_file() or not Path("LICENSE").is_file():
-              raise SystemExit("The integration manifest and root LICENSE are required.")
+          repository = os.environ["EVENT_REPOSITORY"]
+          event_name = os.environ["EVENT_NAME"]
+          event_ref = os.environ["EVENT_REF"]
+          event_sha = os.environ["EVENT_SHA"]
+          release_tag = os.environ["RELEASE_TAG"]
+          release_version = os.environ["RELEASE_VERSION"]
+          if repository != "DarkDevX/ha-spaceview":
+              raise SystemExit("::error::Release publication is restricted to DarkDevX/ha-spaceview.")
+          if not re.fullmatch(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", release_tag):
+              raise SystemExit("::error::Release tag is not a stable semantic version.")
+          if release_tag != f"v{release_version}":
+              raise SystemExit("::error::Release tag and version do not match.")
 
-          version = json.loads(manifest_path.read_text(encoding="utf-8"))["version"]
-          if os.environ["RELEASE_TAG"] != f"v{version}":
-              raise SystemExit("The release tag must be v<manifest version>.")
+          api = f"https://api.github.com/repos/{repository}"
+          headers = {
+              "Accept": "application/vnd.github+json",
+              "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
+              "User-Agent": "spaceview-release-guard",
+              "X-GitHub-Api-Version": "2022-11-28",
+          }
 
-          files = sorted(path for path in component.rglob("*") if path.is_file())
-          if not files:
-              raise SystemExit("The integration directory is empty.")
+          def get_json(path, allow_missing=False):
+              request = urllib.request.Request(api + path, headers=headers)
+              try:
+                  with urllib.request.urlopen(request, timeout=20) as response:
+                      return json.loads(response.read())
+              except urllib.error.HTTPError as error:
+                  if allow_missing and error.code == 404:
+                      return None
+                  raise SystemExit(f"::error::Could not verify public release state (HTTP {error.code}).") from None
+              except (OSError, TimeoutError, json.JSONDecodeError):
+                  raise SystemExit("::error::Could not verify public release state.") from None
 
-          def add_file(archive, source, name):
-              info = ZipInfo(name, date_time=(2020, 1, 1, 0, 0, 0))
-              info.compress_type = ZIP_DEFLATED
-              info.external_attr = 0o100644 << 16
-              archive.writestr(info, source.read_bytes(), compress_type=ZIP_DEFLATED, compresslevel=9)
+          main = get_json("/commits/main")
+          main_sha = main.get("sha") if isinstance(main, dict) else None
+          if main_sha != event_sha:
+              raise SystemExit("::error::The event commit is no longer the exact current public main commit.")
 
-          with ZipFile("spaceview.zip", "w", compression=ZIP_DEFLATED, compresslevel=9) as archive:
-              for path in files:
-                  add_file(archive, path, path.relative_to(component).as_posix())
-              add_file(archive, Path("LICENSE"), "LICENSE")
+          encoded_tag = urllib.parse.quote(release_tag, safe="")
+          if event_name == "workflow_dispatch":
+              if event_ref != "refs/heads/main":
+                  raise SystemExit("::error::Manual release publication is allowed only from public main.")
+              tag = get_json(f"/git/ref/tags/{encoded_tag}", allow_missing=True)
+              release = get_json(f"/releases/tags/{encoded_tag}", allow_missing=True)
+              if tag is not None or release is not None:
+                  raise SystemExit("::error::This tag or release appeared after preparation; no release was changed.")
+          elif event_name == "release":
+              if event_ref != f"refs/tags/{release_tag}":
+                  raise SystemExit("::error::Published release ref does not match its tag.")
+              tagged_commit = get_json(f"/commits/{encoded_tag}")
+              if not isinstance(tagged_commit, dict) or tagged_commit.get("sha") != main_sha:
+                  raise SystemExit("::error::Published tag no longer points to exact current public main.")
+              release = get_json(f"/releases/tags/{encoded_tag}")
+              assets = release.get("assets") if isinstance(release, dict) else None
+              if not isinstance(assets, list):
+                  raise SystemExit("::error::Published release metadata is invalid.")
+              if any(isinstance(asset, dict) and asset.get("name") == "spaceview.zip" for asset in assets):
+                  raise SystemExit("::error::Published release already has spaceview.zip; refusing overwrite.")
+          else:
+              raise SystemExit("::error::Unsupported release event.")
           PY
-      - name: Attach package to GitHub release
+      - name: Create the manual release and attach its verified HACS asset
+        if: github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
-          tag_name: ${{ github.event.release.tag_name }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
+          name: Space View ${{ env.RELEASE_TAG }}
+          body: Space View Home Assistant integration release.
+          draft: false
+          prerelease: false
+          make_latest: true
           files: spaceview.zip
-          overwrite_files: true
+          fail_on_unmatched_files: true
+          overwrite_files: false
           token: ${{ github.token }}
 
-  validate-release:
-    if: github.event_name == 'release'
-    needs: prepare-release
+      - name: Attach the verified HACS asset without changing existing release metadata
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$RELEASE_TAG" spaceview.zip --repo "$GITHUB_REPOSITORY"
+
+  validate-release-asset:
+    needs: publish-release
+    if: needs.publish-release.result == 'success'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - name: HACS validation
+      - name: Check out the public release source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Validate the published HACS release asset
         uses: hacs/action@1ebf01c408f29afcb6406bd431bc98fd8cbb15aa # main
         with:
           category: integration
