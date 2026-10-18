@@ -1,15 +1,24 @@
 {
   "domain": "neonplan3d",
   "name": "Space View",
-  "after_dependencies": ["recorder"],
-  "codeowners": ["@DarkDevX"],
+  "after_dependencies": [
+    "recorder"
+  ],
+  "codeowners": [
+    "@DarkDevX"
+  ],
   "config_flow": true,
-  "dependencies": ["frontend", "http", "panel_custom", "websocket_api"],
+  "dependencies": [
+    "frontend",
+    "http",
+    "panel_custom",
+    "websocket_api"
+  ],
   "documentation": "https://github.com/DarkDevX/ha-spaceview",
   "integration_type": "service",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/DarkDevX/ha-spaceview/issues",
   "requirements": [],
   "single_config_entry": true,
-  "version": "1.19.4"
+  "version": "1.19.5"
 }
