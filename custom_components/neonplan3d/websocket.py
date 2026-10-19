@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from functools import lru_cache
 import json
+import logging
+from pathlib import Path
 import time
 from typing import Any
 
@@ -16,12 +19,32 @@ import voluptuous as vol
 from . import license as lic
 from .const import DATA_DIAGNOSTICS, DOMAIN, SIGNAL_BUILDING_UPDATED
 from .diagnostics_report import DiagnosticsError, DiagnosticsReporter
-from .packs import MAX_PACK_SIZE, PackError, parts_of, verify_pack
+from .packs import (
+    LOCAL_MODEL_PROVENANCE,
+    MAX_PACK_SIZE,
+    PackError,
+    parts_of,
+    validate_local_model_payload,
+    verify_pack,
+)
 from .schema import BUILDING_SCHEMA, IMAGE_DATA
 from .storage import FloorplanData, complete
 from .timetravel import ws_timetravel_history
 
 _IMAGE_ID = vol.All(str, vol.Length(min=1, max=64), vol.Match(r"^[A-Za-z0-9_\-.]+$"))
+_BUNDLED_LOCAL_MODEL = Path(__file__).parent / "data" / "kona_elektro_2021.json"
+_LOGGER = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=1)
+def _bundled_local_model() -> dict[str, Any] | None:
+    """Load the packaged Kona model through the same narrow validator as local imports."""
+    try:
+        raw = json.loads(_BUNDLED_LOCAL_MODEL.read_text(encoding="utf-8"))
+        return validate_local_model_payload(raw)
+    except (OSError, ValueError, RecursionError, PackError) as err:
+        _LOGGER.error("Bundled Open Edition vehicle model is unavailable: %s", err)
+        return None
 
 
 @callback
@@ -39,6 +62,7 @@ def async_register_commands(hass: HomeAssistant) -> None:
         ws_history_restore,
         ws_packs_list,
         ws_packs_import,
+        ws_packs_import_local_model,
         ws_packs_remove,
         ws_packs_install,
         ws_license_get,
@@ -197,10 +221,21 @@ async def ws_history_restore(
 @websocket_api.websocket_command({vol.Required("type"): "neonplan3d/packs/list"})
 @callback
 def ws_packs_list(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    """Return the imported furniture packs (every user needs them to see the furniture)."""
+    """Return imported packs and the bundled local vehicle model."""
     if (data := _data(hass, connection, msg)) is None:
         return
-    connection.send_result(msg["id"], {"packs": data.packs})
+    packs = list(data.packs)
+    model = _bundled_local_model()
+    if model and not any(pack.get("id") == model["id"] for pack in packs):
+        packs.append(
+            {
+                **model,
+                "source": dict(model),
+                "provenance": LOCAL_MODEL_PROVENANCE,
+                "bundled": True,
+            }
+        )
+    connection.send_result(msg["id"], {"packs": packs})
 
 
 @websocket_api.websocket_command(
@@ -229,6 +264,50 @@ async def ws_packs_import(hass: HomeAssistant, connection: websocket_api.ActiveC
             "publisher": payload["publisher"],
             "licensee": payload["licensee"],
             "items": len(payload["items"]),
+        },
+    )
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "neonplan3d/packs/import_local_model",
+        vol.Required("pack"): vol.All(str, vol.Length(max=MAX_PACK_SIZE)),
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_packs_import_local_model(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Import raw payload JSON or an fp3dpack envelope as a local model, without checking its signature."""
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    try:
+        source = json.loads(msg["pack"])
+        if isinstance(source, dict) and "payload" in source:
+            # A local import deliberately trusts neither the envelope nor its signature; it only
+            # extracts and validates the model payload, then stores that clean payload as source.
+            source = source["payload"]
+        payload = validate_local_model_payload(source)
+    except (ValueError, RecursionError):
+        connection.send_error(msg["id"], "not_a_pack", "not JSON")
+        return
+    except PackError as err:
+        connection.send_error(msg["id"], err.code, err.detail or err.code)
+        return
+    if any(p["id"] == payload["id"] and p.get("provenance") != LOCAL_MODEL_PROVENANCE for p in data.packs):
+        connection.send_error(msg["id"], "local_model_id_conflict", "a signed pack already uses this id")
+        return
+    await data.async_add_local_model_pack(payload)
+    connection.send_result(
+        msg["id"],
+        {
+            "id": payload["id"],
+            "name": payload["name"],
+            "publisher": payload["publisher"],
+            "licensee": None,
+            "items": len(payload["items"]),
+            "provenance": LOCAL_MODEL_PROVENANCE,
         },
     )
 
@@ -349,9 +428,7 @@ def ws_backup_export(hass: HomeAssistant, connection: websocket_api.ActiveConnec
 async def ws_backup_import(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Replace the plan and the packs from a backup. Packs are checked again: only ones whose
-    signature verifies (and that are not bound to another installation) come back; the rest are
-    reported as skipped. The state before becomes a restore point."""
+    """Replace the plan and packs from a backup, revalidating signed and local model packs."""
     if (data := _data(hass, connection, msg)) is None:
         return
     try:
@@ -361,8 +438,34 @@ async def ws_backup_import(
         return
     instance = await lic.async_instance_fingerprint(hass)
     packs: list[dict[str, Any]] = []
+    local_entries: list[dict[str, Any]] = []
     skipped: list[dict[str, str]] = []
     for entry in msg["packs"]:
+        if entry.get("provenance") == LOCAL_MODEL_PROVENANCE:
+            source = entry.get("source")
+            name = str(entry.get("id") or "?")
+            if not isinstance(source, dict) or "signature" in entry:
+                skipped.append({"id": name, "reason": "invalid_local_model"})
+                continue
+            try:
+                source_text = json.dumps(source, ensure_ascii=False, separators=(",", ":"))
+                if len(source_text) > MAX_PACK_SIZE:
+                    raise PackError("too_large")
+                clean = validate_local_model_payload(source)
+                if clean["id"] != entry.get("id"):
+                    raise PackError("invalid_local_model", "stored id does not match its source")
+            except (PackError, TypeError, ValueError, RecursionError) as err:
+                skipped.append({"id": name, "reason": getattr(err, "code", "invalid_local_model")})
+                continue
+            local_entries.append(
+                {
+                    **clean,
+                    "source": dict(clean),
+                    "provenance": LOCAL_MODEL_PROVENANCE,
+                    "imported_at": time.time(),
+                }
+            )
+            continue
         signature = entry.get("signature")
         source = entry.get("source")
         name = str(entry.get("id") or "?")
@@ -376,6 +479,13 @@ async def ws_backup_import(
             skipped.append({"id": name, "reason": getattr(err, "code", "bad_signature")})
             continue
         packs.append({**clean, "source": source, "signature": parts_of(text)[1], "imported_at": time.time()})
+    # Process local entries only after signed packs so a colliding local id cannot shadow a
+    # verified publisher pack regardless of the order of entries in the backup file.
+    for entry in local_entries:
+        if any(p["id"] == entry["id"] for p in packs):
+            skipped.append({"id": str(entry["id"]), "reason": "local_model_id_conflict"})
+            continue
+        packs.append(entry)
     revision = await data.async_restore(complete(building), packs)
     connection.send_result(
         msg["id"],
