@@ -13,7 +13,20 @@ The integration keeps its existing **neonplan3d** domain so existing Home Assist
 
 ## Open Edition: Kona and local furniture
 
-The implemented Open Edition capabilities in Space View are available locally and do not require a separate capability pack. They still depend on the Home Assistant entities and data configured in your installation.
+The twelve implemented Open Edition capabilities in Space View are available locally and do not require separate capability packs. They still depend on the Home Assistant entities, integrations, and data configured in your installation. The corresponding signed publisher-pack assets are not included or represented as installed.
+
+- **Camera Cockpit** — camera views and controls from configured cameras.
+- **Weather Outside** — outdoor weather effects from a configured weather entity.
+- **Live Screens** — media-player artwork and configured screen behavior.
+- **Energy Pro** — energy flows, solar, and consumption from linked entities.
+- **Sound & Cinema** — speaker status and controls from linked media players.
+- **Car** — vehicle details supplied by a Home Assistant vehicle integration.
+- **Time Travel (read-only)** — replay of recorded Home Assistant history; service calls are disabled during replay.
+- **Household (beta)** — household signals from configured sources.
+- **Pool Pro** — pool water, equipment, values, covers, and warnings.
+- **Smart Fridge** — a side-by-side fridge model with door sensors and open-door warnings.
+- **Pets** — procedural cats, dogs, and rabbits with plan controls.
+- **Halloween** — the built-in procedural ghost and its on/off control only. Original Halloween decoration packs are not included.
 
 Since [v1.20.2](https://github.com/DarkDevX/ha-spaceview/releases/tag/v1.20.2), the parking-spot vehicle selector includes a bundled Hyundai Kona Electric (2021). Add or edit a parking spot in the plan editor and choose the Kona there. It is included with the integration; you do not need to import the signed “Fahrzeuge” pack.
 
