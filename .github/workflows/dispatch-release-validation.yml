@@ -1,0 +1,140 @@
+name: Dispatch release validation after manifest version changes
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - custom_components/neonplan3d/manifest.json
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Compare manifest versions and dispatch release validation
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF: ${{ github.ref }}
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import base64
+          import json
+          import os
+          import re
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          REPOSITORY = "DarkDevX/ha-spaceview"
+          MANIFEST = "custom_components/neonplan3d/manifest.json"
+          API = f"https://api.github.com/repos/{REPOSITORY}"
+          TOKEN = os.environ["GITHUB_TOKEN"]
+          SHA_PATTERN = re.compile(r"^[0-9a-fA-F]{40}$")
+          VERSION_PATTERN = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+
+          def get_json(path, *, missing_ok=False):
+              request = urllib.request.Request(
+                  API + path,
+                  headers={
+                      "Accept": "application/vnd.github+json",
+                      "User-Agent": "spaceview-release-dispatcher",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      return json.loads(response.read())
+              except urllib.error.HTTPError as error:
+                  if missing_ok and error.code == 404:
+                      return None
+                  raise SystemExit(f"GitHub API read failed (HTTP {error.code}).") from None
+              except (OSError, TimeoutError, json.JSONDecodeError):
+                  raise SystemExit("GitHub API read failed.") from None
+
+          def manifest_version(ref):
+              query = urllib.parse.urlencode({"ref": ref})
+              result = get_json(f"/contents/{MANIFEST}?{query}")
+              if not isinstance(result, dict) or result.get("encoding") != "base64":
+                  raise SystemExit("Manifest response was invalid.")
+              try:
+                  content = base64.b64decode(
+                      result["content"].replace("\n", ""), validate=True
+                  )
+                  manifest = json.loads(content)
+              except (KeyError, ValueError, json.JSONDecodeError):
+                  raise SystemExit("Manifest could not be decoded as JSON.") from None
+              if not isinstance(manifest, dict):
+                  raise SystemExit("Manifest must be a JSON object.")
+              return manifest.get("version")
+
+          def stable_version(value):
+              if not isinstance(value, str):
+                  return None
+              match = VERSION_PATTERN.fullmatch(value)
+              return tuple(int(part) for part in match.groups()) if match else None
+
+          if (
+              os.environ.get("GITHUB_REPOSITORY") != REPOSITORY
+              or os.environ.get("GITHUB_REF") != "refs/heads/main"
+          ):
+              raise SystemExit("Release dispatch is allowed only for pushes to public main.")
+
+          before_sha = os.environ.get("BEFORE_SHA", "")
+          after_sha = os.environ.get("AFTER_SHA", "")
+          if not SHA_PATTERN.fullmatch(after_sha):
+              raise SystemExit("Push event did not provide a full after commit SHA.")
+          if before_sha != "0" * 40 and not SHA_PATTERN.fullmatch(before_sha):
+              raise SystemExit("Push event did not provide a valid before commit SHA.")
+
+          previous_version = (
+              None if before_sha == "0" * 40 else manifest_version(before_sha)
+          )
+          new_version = manifest_version(after_sha)
+          if new_version == previous_version:
+              print("Skipped: manifest version did not change.")
+              raise SystemExit(0)
+          if stable_version(new_version) is None:
+              print("Skipped: changed manifest version is not stable MAJOR.MINOR.PATCH.")
+              raise SystemExit(0)
+
+          current_version = manifest_version("main")
+          if current_version != new_version:
+              print("Skipped: a newer manifest version is already on public main.")
+              raise SystemExit(0)
+
+          body = json.dumps(
+              {"ref": "main", "inputs": {"version": new_version}}
+          ).encode("utf-8")
+          request = urllib.request.Request(
+              API + "/actions/workflows/validate.yml/dispatches",
+              data=body,
+              headers={
+                  "Accept": "application/vnd.github+json",
+                  "Authorization": f"Bearer {TOKEN}",
+                  "Content-Type": "application/json",
+                  "User-Agent": "spaceview-release-dispatcher",
+                  "X-GitHub-Api-Version": "2022-11-28",
+              },
+              method="POST",
+          )
+          try:
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  if response.status != 204:
+                      raise SystemExit("Release validation dispatch returned an unexpected status.")
+          except urllib.error.HTTPError as error:
+              raise SystemExit(
+                  f"Release validation workflow dispatch failed (HTTP {error.code})."
+              ) from None
+          except (OSError, TimeoutError):
+              raise SystemExit("Release validation workflow dispatch failed.") from None
+          print(f"Dispatched public release validation for v{new_version}.")
+          PY
