@@ -1,8 +1,10 @@
-"""Furniture packs: signed files with furniture models built from boxes and cylinders.
+"""Furniture packs: publisher-signed files and schema-validated local model files.
 
-A pack is JSON: the payload (format, id, name, publisher, items) plus a signature. Only packs signed
-with a publisher key listed in PACK_PUBLIC_KEYS are accepted. The signature covers the payload in a
-canonical form (sorted keys, no whitespace, UTF-8), so any change to the file invalidates it.
+A publisher pack is JSON: the payload (format, id, name, publisher, items) plus a signature. Publisher
+packs are accepted only when signed with a key listed in PACK_PUBLIC_KEYS. The signature covers the
+payload in a canonical form (sorted keys, no whitespace, UTF-8), so any change to the file invalidates it.
+Open Edition's separate local importer accepts only ordinary schema-valid model packs without features;
+it never creates or claims a publisher signature.
 
 This module only depends on voluptuous and cryptography, so tools/fp3dpack.py (which signs packs)
 uses the same schema and canonical form.
@@ -21,6 +23,7 @@ import voluptuous as vol
 
 PACK_FORMAT = "fp3dpack"
 PACK_VERSION = 1
+LOCAL_MODEL_PROVENANCE = "local_model"
 # largest pack file accepted (characters of JSON)
 MAX_PACK_SIZE = 1_000_000
 
@@ -230,6 +233,22 @@ def validate_payload(payload: Any) -> dict[str, Any]:
         raise PackError("invalid_content", "item ids must be unique")
     if not ids and not clean["features"]:
         raise PackError("invalid_content", "a pack needs items or features")
+    return clean
+
+
+def validate_local_model_payload(payload: Any) -> dict[str, Any]:
+    """Validate an unsigned, local-only pack of furniture models.
+
+    The ordinary payload schema still owns all structural and geometry limits. This narrow path
+    cannot add capabilities; it does not create a publisher signature.
+    """
+    clean = validate_payload(payload)
+    if clean["features"]:
+        raise PackError("local_model_features")
+    # The submitted publisher is user-controlled and has no cryptographic meaning on this path.
+    clean["publisher"] = "Lokal importiert"
+    clean["licensee"] = None
+    clean["instance"] = None
     return clean
 
 

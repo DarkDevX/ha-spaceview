@@ -31,6 +31,7 @@ from .const import (
     STORAGE_MINOR_VERSION,
     STORAGE_VERSION,
 )
+from .packs import LOCAL_MODEL_PROVENANCE
 from .schema import BUILDING_SCHEMA, empty_building, image_ids
 
 _LOGGER = logging.getLogger(__name__)
@@ -193,6 +194,17 @@ class FloorplanData:
         entry = {**payload, "imported_at": time.time()}
         if signed:
             entry["source"], entry["signature"] = signed
+        self.packs = [p for p in self.packs if p["id"] != payload["id"]] + [entry]
+        await self._pack_store.async_save({"packs": self.packs})
+
+    async def async_add_local_model_pack(self, payload: dict[str, Any]) -> None:
+        """Keep a schema-validated local furniture pack without inventing a publisher signature."""
+        entry = {
+            **payload,
+            "source": dict(payload),
+            "provenance": LOCAL_MODEL_PROVENANCE,
+            "imported_at": time.time(),
+        }
         self.packs = [p for p in self.packs if p["id"] != payload["id"]] + [entry]
         await self._pack_store.async_save({"packs": self.packs})
 
