@@ -31,6 +31,7 @@ from .const import (
     STORAGE_MINOR_VERSION,
     STORAGE_VERSION,
 )
+from .locate.service import DATA_LOCATE, LocateService
 from .packs import LOCAL_MODEL_PROVENANCE, module_sha
 from .schema import BUILDING_SCHEMA, empty_building, image_ids
 
@@ -146,7 +147,9 @@ class FloorplanData:
                 self._images.pop(image_id)
             await self._save_images()
 
-    async def async_save_building(self, building: dict[str, Any]) -> int:
+    async def async_save_building(
+        self, building: dict[str, Any], *, locate_doors: list[list[str]] | None = None
+    ) -> int:
         """Store a validated building, bump the revision and notify subscribers.
 
         The state before the save becomes a restore point when the last one is older than
@@ -158,6 +161,9 @@ class FloorplanData:
         self.building = building
         self.revision += 1
         await self._building_store.async_save({"revision": self.revision, "building": building})
+        if (locate := self.hass.data.get(DATA_LOCATE)) is not None:
+            service: LocateService = locate
+            service.sync_building(building, locate_doors)
         async_dispatcher_send(self.hass, SIGNAL_BUILDING_UPDATED, self.revision)
         return self.revision
 
