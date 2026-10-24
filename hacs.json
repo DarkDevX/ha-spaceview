@@ -3,5 +3,5 @@
   "zip_release": true,
   "filename": "spaceview.zip",
   "render_readme": true,
-  "homeassistant": "2025.1.0"
+  "homeassistant": "2025.10.0"
 }
