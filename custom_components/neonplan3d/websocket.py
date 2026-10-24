@@ -19,6 +19,8 @@ import voluptuous as vol
 from . import license as lic
 from .const import DATA_ASK, DATA_DIAGNOSTICS, DATA_VOICE, DOMAIN, SIGNAL_ASK, SIGNAL_BUILDING_UPDATED
 from .diagnostics_report import DiagnosticsError, DiagnosticsReporter
+from .locate.recorder import ws_locate_rec
+from .locate.ws import COMMANDS as LOCATE_COMMANDS
 from .packs import (
     LOCAL_MODEL_PROVENANCE,
     MAX_PACK_SIZE,
@@ -85,7 +87,10 @@ def async_register_commands(hass: HomeAssistant) -> None:
         ws_voice_answer,
         ws_voice_settings,
         ws_voice_settings_set,
+        ws_locate_rec,
     ):
+        websocket_api.async_register_command(hass, command)
+    for command in LOCATE_COMMANDS:
         websocket_api.async_register_command(hass, command)
 
 
@@ -116,6 +121,8 @@ async def ws_get_building(hass: HomeAssistant, connection: websocket_api.ActiveC
     {
         vol.Required("type"): "neonplan3d/building/save",
         vol.Required("building"): BUILDING_SCHEMA,
+        # Current clients compute this with the same geometry used by the editor.
+        vol.Optional("locate_doors"): [vol.All([vol.All(str, vol.Length(min=1, max=64))], vol.Length(min=2, max=2))],
     }
 )
 @websocket_api.require_admin
@@ -126,7 +133,7 @@ async def ws_save_building(
     """Replace the building."""
     if (data := _data(hass, connection, msg)) is None:
         return
-    revision = await data.async_save_building(msg["building"])
+    revision = await data.async_save_building(msg["building"], locate_doors=msg.get("locate_doors"))
     connection.send_result(msg["id"], {"revision": revision})
 
 
