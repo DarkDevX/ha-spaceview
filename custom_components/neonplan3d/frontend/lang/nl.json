@@ -2071,5 +2071,9 @@
  "persons_pin": "Speld",
  "persons_off": "uit",
  "locate": "Locatie",
- "diag_menu": "Help mee"
+ "diag_menu": "Help mee",
+ "furn_meter_reading": "Meterstand (m³ of liter)",
+ "diag_invite": "Anonieme rapporten laten zien op welke tablets en browsers NeonPlan hapert en welke fouten bij jou optreden – zo wordt elke update precies daar beter. Vrijwillig, zonder namen of plattegrond, en je kunt elk rapport bekijken voordat het wordt verstuurd.",
+ "diag_invite_look": "Bekijken",
+ "diag_invite_later": "Niet nu"
 }

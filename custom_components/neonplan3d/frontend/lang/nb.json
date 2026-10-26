@@ -2071,5 +2071,9 @@
  "persons_pin": "Nål",
  "persons_off": "av",
  "locate": "Lokalisering",
- "diag_menu": "Hjelp til"
+ "diag_menu": "Hjelp til",
+ "furn_meter_reading": "Målerstand (m³ eller liter)",
+ "diag_invite": "Anonyme rapporter viser på hvilke nettbrett og nettlesere NeonPlan hakker, og hvilke feil som oppstår hos deg – slik blir hver oppdatering bedre akkurat der. Frivillig, uten navn eller plantegning, og du kan se hver rapport før den sendes.",
+ "diag_invite_look": "Se nærmere",
+ "diag_invite_later": "Ikke nå"
 }
