@@ -136,6 +136,8 @@ _ROOM_SCHEMA = vol.Schema(
             ],
             vol.Length(max=MAX_POINTS),
         ),
+        # what a module keeps for this room or the whole house (its settings), by the module's id
+        vol.Optional("mods"): _MODULE_DATA,
     },
     extra=vol.ALLOW_EXTRA,
 )
@@ -863,6 +865,8 @@ SETTINGS_SCHEMA = vol.Schema(
         vol.Optional("outage_entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # sunlight through the windows as patches on the floor
         vol.Optional("sun_patches", default=True): bool,
+        vol.Optional("sun_shadow", default=True): bool,
+        vol.Optional("window_glow", default=True): bool,
         # fun pack "Halloween": the ghost floating through the house (on unless switched off)
         # Haushalt Pro: the hours a waste bin glows (from the day before, until on the day)
         vol.Optional("household"): vol.Any(
@@ -976,6 +980,8 @@ SETTINGS_SCHEMA = vol.Schema(
                 extra=vol.ALLOW_EXTRA,
             ),
         ),
+        # what a module keeps for this room or the whole house (its settings), by the module's id
+        vol.Optional("mods"): _MODULE_DATA,
     },
     extra=vol.ALLOW_EXTRA,
 )
