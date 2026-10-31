@@ -17,7 +17,16 @@ from homeassistant.loader import async_get_integration
 import voluptuous as vol
 
 from . import license as lic
-from .const import DATA_ASK, DATA_DIAGNOSTICS, DATA_VOICE, DOMAIN, SIGNAL_ASK, SIGNAL_BUILDING_UPDATED
+from .const import (
+    DATA_ASK,
+    DATA_DIAGNOSTICS,
+    DATA_VOICE,
+    DOMAIN,
+    SIGNAL_ANNOUNCE,
+    SIGNAL_ASK,
+    SIGNAL_BUILDING_UPDATED,
+    SIGNAL_SPACEVIEW_ANNOUNCE,
+)
 from .diagnostics_report import DiagnosticsError, DiagnosticsReporter
 from .locate.recorder import ws_locate_rec
 from .locate.ws import COMMANDS as LOCATE_COMMANDS
@@ -84,6 +93,7 @@ def async_register_commands(hass: HomeAssistant) -> None:
         ws_diagnostics_delete,
         ws_diagnostics_client,
         ws_voice_subscribe,
+        ws_spaceview_announce_subscribe,
         ws_voice_answer,
         ws_voice_settings,
         ws_voice_settings_set,
@@ -660,16 +670,47 @@ def ws_diagnostics_client(hass: HomeAssistant, connection: websocket_api.ActiveC
     connection.send_result(msg["id"], {"enabled": True})
 
 
-@websocket_api.websocket_command({vol.Required("type"): "neonplan3d/voice/subscribe"})
+@websocket_api.websocket_command(
+    {vol.Required("type"): "neonplan3d/voice/subscribe", vol.Optional("announce", default=False): bool}
+)
 @callback
 def ws_voice_subscribe(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    """Every sentence Assist (or the service `neonplan3d.ask`) hands to the views; each open view listens."""
+    """Every sentence Assist (or the service `neonplan3d.ask`) hands to the views; each open view listens. A view
+    that knows them (`announce`) also gets the announcements of the service `neonplan3d.announce` for the screens."""
 
     @callback
     def forward(ask: dict[str, Any]) -> None:
         connection.send_message(websocket_api.event_message(msg["id"], ask))
 
-    connection.subscriptions[msg["id"]] = async_dispatcher_connect(hass, SIGNAL_ASK, forward)
+    @callback
+    def forward_announce(announce: dict[str, Any]) -> None:
+        connection.send_message(websocket_api.event_message(msg["id"], {"announce": announce}))
+
+    unsubs = [async_dispatcher_connect(hass, SIGNAL_ASK, forward)]
+    if msg["announce"]:
+        unsubs.append(async_dispatcher_connect(hass, SIGNAL_ANNOUNCE, forward_announce))
+
+    @callback
+    def unsubscribe() -> None:
+        for unsub in unsubs:
+            unsub()
+
+    connection.subscriptions[msg["id"]] = unsubscribe
+    connection.send_result(msg["id"])
+
+
+@websocket_api.websocket_command({vol.Required("type"): "neonplan3d/spaceview_announce/subscribe"})
+@callback
+def ws_spaceview_announce_subscribe(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Send native Space View announcements to the open 3D views."""
+
+    @callback
+    def forward(announcement: dict[str, Any]) -> None:
+        connection.send_message(websocket_api.event_message(msg["id"], announcement))
+
+    connection.subscriptions[msg["id"]] = async_dispatcher_connect(hass, SIGNAL_SPACEVIEW_ANNOUNCE, forward)
     connection.send_result(msg["id"])
 
 

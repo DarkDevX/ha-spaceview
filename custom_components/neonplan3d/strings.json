@@ -28,6 +28,62 @@
           "description": "The view speaks its answer with Assist's text-to-speech (off: it only shows it)."
         }
       }
+    },
+    "announce": {
+      "name": "Announcement",
+      "description": "Says a message on the speakers of the plan's rooms, as the Announcements module does (needs the module). Each room uses its chosen speaker, else one placed in it, else one of its area, else the default speaker from the module's settings.",
+      "fields": {
+        "message": {
+          "name": "Message",
+          "description": "What the speakers say."
+        },
+        "rooms": {
+          "name": "Rooms",
+          "description": "Room names in the plan (or their Home Assistant areas). Empty: every room (of the floor, when one is given)."
+        },
+        "floor": {
+          "name": "Floor",
+          "description": "Only the rooms of this floor (its name in the plan)."
+        },
+        "ignore_quiet": {
+          "name": "Ignore quiet time",
+          "description": "Speak in rooms that have their quiet time now, too. A single room asked for by name always speaks."
+        },
+        "on_screens": {
+          "name": "On NeonPlan screens",
+          "description": "Every open NeonPlan screen (a wall tablet too) speaks the message itself and shows it. Without rooms or a floor only the screens speak."
+        },
+        "screens": {
+          "name": "Screens",
+          "description": "Only the NeonPlan screens with these screen names (set in the view's settings or the card's option screen)."
+        }
+      }
+    },
+    "spaceview_announce": {
+      "name": "Space View announcement",
+      "description": "Says a message on available speakers in the plan or on selected open Space View screens. Uses the approved Announcements module when installed; otherwise Space View finds media players placed in each room or assigned to its Home Assistant area, with Home Assistant TTS as a fallback.",
+      "fields": {
+        "message": {
+          "name": "Message",
+          "description": "What the speakers and selected screens announce."
+        },
+        "rooms": {
+          "name": "Rooms",
+          "description": "Room names in the plan, aliases, ids, or linked Home Assistant area names. Empty: every eligible room (of the floor, when one is given)."
+        },
+        "floor": {
+          "name": "Floor",
+          "description": "Only the rooms and outdoor areas of this floor."
+        },
+        "on_screens": {
+          "name": "On Space View screens",
+          "description": "Show and speak the message on open Space View screens. Without rooms or a floor, only screens speak."
+        },
+        "screens": {
+          "name": "Screens",
+          "description": "Only Space View screens with these screen names."
+        }
+      }
     }
   }
 }
