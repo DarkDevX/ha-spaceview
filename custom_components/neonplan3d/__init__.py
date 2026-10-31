@@ -19,6 +19,7 @@ from homeassistant.helpers.http import KEY_HASS
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 
+from .announce import async_setup_announce, async_unload_announce
 from .card_resource import (
     LOADER_FILE,
     LOADER_URL,
@@ -41,6 +42,7 @@ from .diagnostics_report import DiagnosticsReporter
 from .license import FIRST_CHECK_DELAY, REFRESH_INTERVAL, async_refresh_quietly
 from .locate.recorder import DATA_RECORDER
 from .locate.service import DATA_LOCATE, LocateService
+from .spaceview_announce import async_setup_spaceview_announce, async_unload_spaceview_announce
 from .storage import FloorplanData
 from .voice import async_remove_sentences, async_setup_voice, async_unload_voice
 from .websocket import async_register_commands
@@ -148,6 +150,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Assist asks the house: service, intent and the sentences Assist understands (with the names locating knows)
     await async_setup_voice(hass)
+    # announcements from automations (answers only while the Announcements module is installed)
+    async_setup_announce(hass)
+    # Space View's own announcement action delegates to the approved module when available, else works natively
+    async_setup_spaceview_announce(hass)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     await _async_register_static(hass)
@@ -182,6 +188,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     with contextlib.suppress(KeyError, ValueError):
         frontend.remove_extra_js_url(hass, await _async_main_url(hass))
     async_unload_voice(hass)
+    async_unload_announce(hass)
+    async_unload_spaceview_announce(hass)
     if (recorder := hass.data.pop(DATA_RECORDER, None)) is not None:
         recorder.stop()
     if (locate := hass.data.pop(DATA_LOCATE, None)) is not None:
