@@ -33,6 +33,11 @@ announce:
       example: "Obergeschoss"
       selector:
         text:
+    plan:
+      required: false
+      example: "Gartenhaus"
+      selector:
+        text:
     ignore_quiet:
       required: false
       default: false
@@ -87,3 +92,8 @@ reload_screens:
       selector:
         text:
           multiple: true
+    plan:
+      required: false
+      example: "main"
+      selector:
+        text:
