@@ -56,7 +56,7 @@ _METRES = vol.All(vol.Coerce(float), vol.Range(min=0.01, max=10))
 # and height of the item height. A cylinder's diameter is the smaller of w and d.
 PART_SCHEMA = vol.Schema(
     {
-        vol.Required("shape"): vol.In(["box", "cyl", "loft"]),
+        vol.Required("shape"): vol.In(["box", "cyl", "loft", "sweep"]),
         vol.Required("x"): _FRACTION,
         vol.Required("z"): _FRACTION,
         vol.Required("w"): _SPAN,
@@ -76,6 +76,10 @@ PART_SCHEMA = vol.Schema(
         vol.Optional("tz"): _FRACTION,
         vol.Optional("tw"): _SPAN,
         vol.Optional("td"): _SPAN,
+        # sweep: cross sections along z as [z, bottom, top, width], in item-size fractions
+        vol.Optional("stations"): vol.Any(list),
+        vol.Optional("exp"): vol.All(vol.Coerce(float), vol.Range(min=1.5, max=8)),
+        vol.Optional("n"): vol.All(vol.Coerce(int), vol.Range(min=6, max=32)),
         # cylinder axis: upright (default) or lying along x or z (wheels, rollers)
         vol.Optional("axis"): vol.In(["x", "y", "z"]),
         # turn of the part around its own centre (degrees around the vertical axis): spiral steps, diagonals
@@ -270,6 +274,26 @@ def validate_payload(payload: Any) -> dict[str, Any]:
     ids = [item["id"] for item in clean["items"]]
     if len(ids) != len(set(ids)):
         raise PackError("invalid_content", "item ids must be unique")
+    for item in clean["items"]:
+        for index, part in enumerate(item["parts"]):
+            if part["shape"] != "sweep":
+                continue
+            stations = part.get("stations")
+            if not isinstance(stations, list) or not 2 <= len(stations) <= 48:
+                raise PackError("invalid_content", f"{item['id']} part {index}: sweep needs 2 to 48 stations")
+            previous_z: float | None = None
+            for station in stations:
+                if not isinstance(station, list) or len(station) != 4:
+                    raise PackError("invalid_content", f"{item['id']} part {index}: invalid sweep station")
+                z, bottom, top, width = station
+                values = (z, bottom, top, width)
+                if any(not isinstance(value, (int, float)) or isinstance(value, bool) for value in values):
+                    raise PackError("invalid_content", f"{item['id']} part {index}: invalid sweep station")
+                if not (-0.5 <= z <= 0.5 and 0 <= bottom < top <= 1 and 0.001 <= width <= 1):
+                    raise PackError("invalid_content", f"{item['id']} part {index}: sweep station out of range")
+                if previous_z is not None and z <= previous_z:
+                    raise PackError("invalid_content", f"{item['id']} part {index}: sweep stations must ascend")
+                previous_z = z
     if not ids and not clean["features"] and not clean.get("module"):
         raise PackError("invalid_content", "a pack needs items, features or a module")
     return clean

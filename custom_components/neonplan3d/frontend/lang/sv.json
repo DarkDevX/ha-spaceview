@@ -2272,5 +2272,17 @@
  "energy_hub_tap": "Tryck i planen där kablarna möts.",
  "roof_overhang_sides": "Takutsprång per sida",
  "roof_overhang_sides_hint": "Ställ in takutsprånget för varje sida själv. Av: automatiskt – inget utsprång där takytan möter en högre del av huset.",
- "well_depth": "Djup från väggen (m)"
+ "well_depth": "Djup från väggen (m)",
+ "marker_show_active": "Bara när aktiv",
+ "floor_copy": "Duplicera våning",
+ "floor_copy_name": "{name} (kopia)",
+ "floor_copy_hint": "Lägger våningen en gång till överst på huset: rum, väggar, fönster, dörrar och möbler, utan kopplingar till Home Assistant.",
+ "top_hung": "Överkantshängt (öppnas utåt nedtill)",
+ "top_hung_hint": "Fönstret hänger i överkant och öppnas utåt nedtill – öppet och vädringsläge ser likadana ut.",
+ "camera_detect_popup": "Visa bilden vid ny detektering",
+ "camera_detect_popup_hint": "Camera Cockpit: when the camera detects something new (person, car, motion), its picture shows for 20 seconds at the bottom right – a tap looks through the camera.",
+ "camera_popup_open": "Titta genom kameran",
+ "style_slide": "Skjut (en ruta glider framför den fasta)",
+ "preset_terrace_slide": "Lyft-skjutdörr",
+ "preset_window_slide": "Skjutfönster"
 }

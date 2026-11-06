@@ -2272,5 +2272,17 @@
  "energy_hub_tap": "在平面图中点按电缆汇集的位置。",
  "roof_overhang_sides": "每边挑檐",
  "roof_overhang_sides_hint": "为每一边单独设置屋顶挑檐。关闭：自动——屋面与房子较高部分相接处没有挑檐。",
- "well_depth": "离墙深度（米）"
+ "well_depth": "离墙深度（米）",
+ "marker_show_active": "仅在激活时",
+ "floor_copy": "复制楼层",
+ "floor_copy_name": "{name}（副本）",
+ "floor_copy_hint": "把这一层再放到房子顶部一次：房间、墙、窗、门和家具，不带 Home Assistant 的关联。",
+ "top_hung": "上悬窗（下端向外开）",
+ "top_hung_hint": "窗户在上端铰接，下端向外打开——打开和倾斜看起来一样。",
+ "camera_detect_popup": "新检测时弹出画面",
+ "camera_detect_popup_hint": "Camera Cockpit: when the camera detects something new (person, car, motion), its picture shows for 20 seconds at the bottom right – a tap looks through the camera.",
+ "camera_popup_open": "通过摄像头查看",
+ "style_slide": "推拉（一扇滑到固定扇前面）",
+ "preset_terrace_slide": "提升推拉门",
+ "preset_window_slide": "推拉窗"
 }

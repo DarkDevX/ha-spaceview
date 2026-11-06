@@ -2272,5 +2272,17 @@
  "energy_hub_tap": "Koppints a tervben oda, ahol a kábelek találkoznak.",
  "roof_overhang_sides": "Ereszkiállás oldalanként",
  "roof_overhang_sides_hint": "Állítsd be magad a tető kiállását minden oldalon. Ki: automatikus – nincs kiállás ott, ahol a tetőfelület a ház magasabb részéhez ér.",
- "well_depth": "Mélység a faltól (m)"
+ "well_depth": "Mélység a faltól (m)",
+ "marker_show_active": "Csak ha aktív",
+ "floor_copy": "Szint másolása",
+ "floor_copy_name": "{name} (másolat)",
+ "floor_copy_hint": "A szintet még egyszer a ház tetejére teszi: szobák, falak, ablakok, ajtók és bútorok, Home Assistant-kapcsolatok nélkül.",
+ "top_hung": "Felül függesztett (alul kifelé nyílik)",
+ "top_hung_hint": "Az ablak felül függ, alul kifelé nyílik – a nyitott és a bukó állás egyformán néz ki.",
+ "camera_detect_popup": "Új észlelésnél mutassa a képet",
+ "camera_detect_popup_hint": "Camera Cockpit: when the camera detects something new (person, car, motion), its picture shows for 20 seconds at the bottom right – a tap looks through the camera.",
+ "camera_popup_open": "Nézz a kamerán át",
+ "style_slide": "Toló (az egyik szárny a fix elé csúszik)",
+ "preset_terrace_slide": "Emelő-toló ajtó",
+ "preset_window_slide": "Tolóablak"
 }
