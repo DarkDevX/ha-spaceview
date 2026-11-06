@@ -2272,5 +2272,17 @@
  "energy_hub_tap": "Toca na planta onde os cabos se encontram.",
  "roof_overhang_sides": "Beiral por lado",
  "roof_overhang_sides_hint": "Definir tu mesmo o beiral de cada lado. Desligado: automático – sem beiral onde a água do telhado encosta a uma parte mais alta da casa.",
- "well_depth": "Profundidade a partir da parede (m)"
+ "well_depth": "Profundidade a partir da parede (m)",
+ "marker_show_active": "Só quando ativo",
+ "floor_copy": "Duplicar piso",
+ "floor_copy_name": "{name} (cópia)",
+ "floor_copy_hint": "Coloca o piso mais uma vez no topo da casa: divisões, paredes, janelas, portas e móveis, sem ligações ao Home Assistant.",
+ "top_hung": "Projetante (abre para fora em baixo)",
+ "top_hung_hint": "A janela está presa em cima e abre para fora em baixo – aberta e entreaberta parecem iguais.",
+ "camera_detect_popup": "Mostrar a imagem numa nova deteção",
+ "camera_detect_popup_hint": "Camera Cockpit: when the camera detects something new (person, car, motion), its picture shows for 20 seconds at the bottom right – a tap looks through the camera.",
+ "camera_popup_open": "Ver pela câmara",
+ "style_slide": "De correr (uma folha desliza à frente da fixa)",
+ "preset_terrace_slide": "Porta elevatória de correr",
+ "preset_window_slide": "Janela de correr"
 }

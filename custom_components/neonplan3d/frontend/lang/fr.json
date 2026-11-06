@@ -2272,5 +2272,17 @@
  "energy_hub_tap": "Touche le plan à l'endroit où les câbles se rejoignent.",
  "roof_overhang_sides": "Débord par côté",
  "roof_overhang_sides_hint": "Définir toi-même le débord de toit de chaque côté. Désactivé : automatique – pas de débord là où la surface touche une partie plus haute de la maison.",
- "well_depth": "Profondeur depuis le mur (m)"
+ "well_depth": "Profondeur depuis le mur (m)",
+ "marker_show_active": "Seulement si actif",
+ "floor_copy": "Dupliquer l'étage",
+ "floor_copy_name": "{name} (copie)",
+ "floor_copy_hint": "Pose l'étage une fois de plus en haut de la maison : pièces, murs, fenêtres, portes et meubles, sans liens vers Home Assistant.",
+ "top_hung": "À projection (s'ouvre vers l'extérieur en bas)",
+ "top_hung_hint": "La fenêtre pend en haut et s'ouvre vers l'extérieur en bas – ouverte et entrouverte se ressemblent.",
+ "camera_detect_popup": "Afficher l'image lors d'une nouvelle détection",
+ "camera_detect_popup_hint": "Camera Cockpit: when the camera detects something new (person, car, motion), its picture shows for 20 seconds at the bottom right – a tap looks through the camera.",
+ "camera_popup_open": "Regarder par la caméra",
+ "style_slide": "Coulissant (un vantail glisse devant le fixe)",
+ "preset_terrace_slide": "Porte levante-coulissante",
+ "preset_window_slide": "Fenêtre coulissante"
 }

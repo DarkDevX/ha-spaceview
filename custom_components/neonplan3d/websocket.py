@@ -35,6 +35,7 @@ from .const import (
 from .diagnostics_report import DiagnosticsError, DiagnosticsReporter
 from .locate.recorder import ws_locate_rec
 from .locate.ws import COMMANDS as LOCATE_COMMANDS
+from .nextfloor_packs import bundled_nextfloor_packs
 from .packs import (
     LOCAL_MODEL_PROVENANCE,
     MAX_PACK_SIZE,
@@ -434,7 +435,7 @@ async def ws_plans_locate(hass: HomeAssistant, connection: websocket_api.ActiveC
 @websocket_api.websocket_command({vol.Required("type"): "neonplan3d/packs/list"})
 @callback
 def ws_packs_list(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    """Return imported packs and the bundled local vehicle model."""
+    """Return imported packs and the bundled Open Edition models."""
     if (data := _data(hass, connection, msg)) is None:
         return
     packs = [_without_code(p) for p in data.packs]
@@ -448,6 +449,11 @@ def ws_packs_list(hass: HomeAssistant, connection: websocket_api.ActiveConnectio
                 "bundled": True,
             }
         )
+    installed_ids = {pack.get("id") for pack in packs}
+    for pack in bundled_nextfloor_packs():
+        if pack["id"] not in installed_ids:
+            packs.append(pack)
+            installed_ids.add(pack["id"])
     connection.send_result(msg["id"], {"packs": packs})
 
 
