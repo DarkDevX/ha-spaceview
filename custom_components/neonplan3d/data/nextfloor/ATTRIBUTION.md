@@ -10,3 +10,10 @@ Space View adapts these static models to its validated pack schema. Geometry and
 mount, light, vehicle, surface, and stair-opening metadata are retained. NextFloor-only controls
 and metadata, including live climate, pet, household, cover, switch-button, and uploaded-mesh
 behavior, are not implemented by this bundle. No external GLB model files are included.
+
+The Realistic preview look also adapts the shader in NextFloor v0.31.4,
+commit a149d9dfb637d1c7cf6cf2752465fd33ca8010fc. Its six photo textures
+come from Poly Haven (laminate_floor_02, marble_01, painted_plaster_wall,
+roof_tiles_14, forrest_ground_01, plaster_grey_04), reduced to 512 px.
+They are CC0; attribution is included as a courtesy. The adapted shader
+code is distributed under the MIT license above.

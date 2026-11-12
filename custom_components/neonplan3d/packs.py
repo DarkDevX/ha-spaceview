@@ -76,6 +76,9 @@ PART_SCHEMA = vol.Schema(
         vol.Optional("tz"): _FRACTION,
         vol.Optional("tw"): _SPAN,
         vol.Optional("td"): _SPAN,
+        # loft ends: false leaves the front (+z) or back (-z) open
+        vol.Optional("capFront"): bool,
+        vol.Optional("capBack"): bool,
         # sweep: cross sections along z as [z, bottom, top, width], in item-size fractions
         vol.Optional("stations"): vol.Any(list),
         vol.Optional("exp"): vol.All(vol.Coerce(float), vol.Range(min=1.5, max=8)),
@@ -166,6 +169,8 @@ KNOWN_FEATURES = [
     "time_travel",
     "pool",
     "household",
+    # digital picture frames (a pack with furniture and the "frames" feature)
+    "frames",
     # fun packs: free extras one picks up in the shop (pets, later seasonal ones)
     "fun_pets",
     "fun_halloween",
