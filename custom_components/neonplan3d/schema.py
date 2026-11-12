@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from itertools import pairwise
 import math
+from typing import Any
 
 import voluptuous as vol
 
@@ -111,6 +112,11 @@ _ROOM_SCHEMA = vol.Schema(
         ),
         # ceiling height of the room (None = the floor height)
         vol.Optional("ceiling_height"): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=1, max=30))),
+        # colour of the room's side of each wall ("#rrggbb", None = wall_color), and of all its walls (homely styles)
+        vol.Optional("wall_colors"): vol.Any(
+            None, vol.All([vol.Any(None, vol.All(str, vol.Length(max=16)))], vol.Length(max=MAX_POINTS))
+        ),
+        vol.Optional("wall_color"): vol.Any(None, vol.All(str, vol.Length(max=16))),
         # thickness of the wall on each edge in m (None = the building's exterior / interior thickness)
         vol.Optional("wall_thickness"): vol.All(
             [vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0.02, max=1.5)))],
@@ -284,6 +290,8 @@ _VEHICLE_TYPE_SCHEMA = vol.Schema(
 
 # the kinds of waste a bin can take (household.ts WASTE_KINDS)
 WASTE_KINDS = ["rest", "bio", "paper", "plastic", "glass", "garden", "recycling", "other"]
+# digital picture frames: what a frame's face shows
+FRAME_KINDS = ["calendar", "camera", "media", "person", "photo", "weather", "todo", "board", "persons"]
 
 FURNITURE_SCHEMA = vol.Schema(
     {
@@ -368,6 +376,12 @@ FURNITURE_SCHEMA = vol.Schema(
         vol.Optional("bin_source"): vol.Any(None, vol.All(str, vol.Length(max=255))),
         vol.Optional("bin_match"): vol.Any(None, vol.All(str, vol.Length(max=120))),
         vol.Optional("mailbox_door"): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        # digital picture frames: what the face shows and where it comes from (entities, or a URL for a photo)
+        vol.Optional("frame_kind"): vol.Any(None, vol.In(FRAME_KINDS)),
+        vol.Optional("frame_source"): vol.Any(None, vol.All(str, vol.Length(max=4000))),
+        vol.Optional("frame_trigger"): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        vol.Optional("frame_remind"): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=1440))),
+        vol.Optional("frame_interval"): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=3, max=3600))),
         # Haushalt Pro: on while the bin is out (an input_boolean a nightly automation resets)
         vol.Optional("bin_out"): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # Haushalt Pro: a plant's moisture, an appliance's time left, a service, a fridge's door alarm
@@ -857,6 +871,22 @@ FLOOR_SCHEMA = vol.Schema(
 )
 
 
+# the styles' text settings: the house's plan for day, evening and night, a helper entity, the facade colour
+_STYLE_TEXTS: dict[Any, Any] = {
+    vol.Optional(key): vol.Any(None, vol.All(str, vol.Length(max=64)))
+    for key in (
+        "style_day",
+        "style_evening",
+        "style_night",
+        "style_morning_at",
+        "style_evening_at",
+        "style_night_at",
+        "style_entity",
+        "facade_color",
+    )
+}
+
+
 SETTINGS_SCHEMA = vol.Schema(
     {
         vol.Required("wall_exterior"): vol.All(vol.Coerce(float), vol.Range(min=0.02, max=1)),
@@ -944,6 +974,12 @@ SETTINGS_SCHEMA = vol.Schema(
                 extra=vol.ALLOW_EXTRA,
             ),
         ),
+        # the styles: the house's plan for day, evening and night, how it switches, a helper entity naming the style,
+        # and the facade colour of the homely styles
+        **_STYLE_TEXTS,
+        vol.Optional("style_switch"): vol.Any(None, vol.In(["sun", "time"])),
+        # own styles: built-in ones adjusted and named (their settings are checked by the frontend)
+        vol.Optional("styles_custom"): vol.Any(None, vol.All([dict], vol.Length(max=40))),
         # the background behind the 3D house (None = the look's own sky): a colour, a gradient or a picture
         vol.Optional("backdrop", default=None): vol.Any(
             None,
