@@ -95,6 +95,10 @@ _ROOM_SCHEMA = vol.Schema(
             vol.Length(max=MAX_POINTS),
         ),
         vol.Required("floor_material"): vol.All(str, vol.Length(max=32)),
+        # the room's name moved from its middle in the plan and in 3D (metres; None = in the middle)
+        vol.Optional("label_offset"): vol.Any(
+            None, vol.All([vol.All(vol.Coerce(float), vol.Range(min=-100, max=100))], vol.Length(min=2, max=2))
+        ),
         # the camera this room opens with when it is tapped (None = framed from above)
         vol.Optional("start_view", default=None): vol.Any(None, START_VIEW_SCHEMA),
         # entities shown in the room's panel although they are not in the plan
@@ -203,6 +207,8 @@ OPENING_SCHEMA = vol.Schema(
         vol.Optional("top_hung", default=False): bool,
         # look: None = automatic (front door in an exterior wall, room door inside; plain window)
         vol.Optional("style", default=None): vol.Any(None, vol.In(_OPENING_STYLES)),
+        # a garage door: sectional (None) or up-and-over
+        vol.Optional("garage_kind"): vol.Any(None, vol.In(["sectional", "tilt"])),
         # front doors with sidelights: one on the hinge side, and the widths (None = automatic)
         vol.Optional("sidelight_hinge", default=False): bool,
         vol.Optional("sidelight_width", default=None): vol.Any(
@@ -221,6 +227,10 @@ OPENING_SCHEMA = vol.Schema(
         vol.Optional("position", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # the position sensor counts the other way round (0 = open)
         vol.Optional("position_inverted", default=False): bool,
+        # a venetian blind whose cover reports its slats the other way round (0 = open): turned in 3D and the sliders
+        vol.Optional("slat_invert"): vol.Any(None, bool),
+        # where the blind sits: outside as a roller shutter (None) or inside the room as a roller shade
+        vol.Optional("blind_side"): vol.Any(None, vol.In(["inside", "outside"])),
         # windows: a sensor with the sash's tilt angle (degrees), the angle that counts as fully tilted,
         # an offset the sensor reports when closed, and the other sign
         vol.Optional("tilt_angle", default=None): _ENTITY_REF,
@@ -372,6 +382,9 @@ FURNITURE_SCHEMA = vol.Schema(
         # household: a waste bin's kind and colours, its calendar (Haushalt Pro); a mailbox's emptying door
         vol.Optional("bin_kind"): vol.Any(None, vol.In(WASTE_KINDS)),
         vol.Optional("bin_color"): vol.Any(None, vol.Match(r"^#[0-9a-fA-F]{6}$")),
+        # a neon sign: its own text and the colour of its tubes
+        vol.Optional("sign_text"): vol.Any(None, vol.All(str, vol.Length(max=80))),
+        vol.Optional("sign_color"): vol.Any(None, vol.Match(r"^#[0-9a-fA-F]{6}$")),
         vol.Optional("bin_lid"): vol.Any(None, vol.Match(r"^#[0-9a-fA-F]{6}$")),
         vol.Optional("bin_source"): vol.Any(None, vol.All(str, vol.Length(max=255))),
         vol.Optional("bin_match"): vol.Any(None, vol.All(str, vol.Length(max=120))),
@@ -826,6 +839,8 @@ _FREE_WALL_SCHEMA = vol.Schema(
             None,
             vol.All([vol.All(vol.Coerce(float), vol.Range(min=0.05, max=20))], vol.Length(min=2, max=2)),
         ),
+        # colour of both sides (#1101, homely styles; None = the room's wall or the facade)
+        vol.Optional("color"): vol.Any(None, vol.All(str, vol.Length(max=16))),
     },
     extra=vol.ALLOW_EXTRA,
 )
@@ -887,6 +902,52 @@ _STYLE_TEXTS: dict[Any, Any] = {
 }
 
 
+# the neighbourhood from OpenStreetMap (surroundings.ts): map metres around the home, fetched once in the browser
+_SURROUND_POLY = vol.All([_POINT], vol.Length(min=2, max=MAX_POINTS))
+SURROUNDINGS_SCHEMA = vol.Schema(
+    {
+        vol.Required("on"): bool,
+        vol.Required("lat"): vol.All(vol.Coerce(float), vol.Range(min=-90, max=90)),
+        vol.Required("lon"): vol.All(vol.Coerce(float), vol.Range(min=-180, max=180)),
+        vol.Required("at"): vol.All(vol.Coerce(float), vol.Range(min=0)),
+        vol.Required("radius"): vol.All(vol.Coerce(float), vol.Range(min=20, max=600)),
+        vol.Required("x"): _COORD,
+        vol.Required("z"): _COORD,
+        vol.Optional("own"): vol.Any(None, vol.All(int, vol.Range(min=0))),
+        vol.Optional("hide"): vol.All([vol.All(int, vol.Range(min=0))], vol.Length(max=3000)),
+        vol.Optional("show"): vol.All([vol.All(int, vol.Range(min=0))], vol.Length(max=3000)),
+        vol.Optional("flat"): bool,
+        vol.Required("buildings"): vol.All(
+            [
+                vol.Schema(
+                    {
+                        vol.Required("p"): _SURROUND_POLY,
+                        vol.Required("h"): vol.All(vol.Coerce(float), vol.Range(min=0, max=400)),
+                    }
+                )
+            ],
+            vol.Length(max=3000),
+        ),
+        vol.Required("ways"): vol.All(
+            [
+                vol.Schema(
+                    {
+                        vol.Required("p"): _SURROUND_POLY,
+                        vol.Required("w"): vol.All(vol.Coerce(float), vol.Range(min=0, max=60)),
+                        vol.Required("k"): vol.In(["road", "path", "rail", "water"]),
+                    }
+                )
+            ],
+            vol.Length(max=3000),
+        ),
+        vol.Required("areas"): vol.All(
+            [vol.Schema({vol.Required("p"): _SURROUND_POLY, vol.Required("k"): vol.In(["water", "green", "wood"])})],
+            vol.Length(max=500),
+        ),
+        vol.Required("trees"): vol.All([_POINT], vol.Length(max=3000)),
+    }
+)
+
 SETTINGS_SCHEMA = vol.Schema(
     {
         vol.Required("wall_exterior"): vol.All(vol.Coerce(float), vol.Range(min=0.02, max=1)),
@@ -900,6 +961,9 @@ SETTINGS_SCHEMA = vol.Schema(
         vol.Optional("person_look", default=None): vol.Any(None, vol.In(["figure", "pin", "off"])),
         # plan lock: rooms, walls, doors, windows and outdoor areas cannot be moved by accident
         vol.Optional("lock_plan", default=False): bool,
+        # size of the room names in 3D (1 = as before)
+        vol.Optional("label_scale"): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0.5, max=2))),
+        vol.Optional("surroundings"): vol.Any(None, SURROUNDINGS_SCHEMA),
         # stations and playlists for the speakers' quick menu (media_player.play_media type + content id)
         vol.Optional("media_presets", default=list): vol.All(
             [
@@ -970,6 +1034,10 @@ SETTINGS_SCHEMA = vol.Schema(
                     # only the bins of the next pickup wear a tag; tags only from some days before (None = always)
                     vol.Optional("bin_next_only"): vol.Any(None, bool),
                     vol.Optional("bin_days"): vol.Any(None, vol.All(vol.Coerce(int), vol.Range(min=0, max=60))),
+                    # calendars whose entries of today stand in the glass card "Today in the household"
+                    vol.Optional("calendars"): vol.Any(
+                        None, vol.All([vol.All(str, vol.Length(max=255))], vol.Length(max=10))
+                    ),
                 },
                 extra=vol.ALLOW_EXTRA,
             ),
