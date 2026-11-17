@@ -12,6 +12,8 @@ from datetime import datetime
 import logging
 from typing import Any
 
+from homeassistant.auth.models import User
+from homeassistant.auth.permissions.const import POLICY_READ
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
@@ -177,6 +179,17 @@ def collect(
     }
 
 
+def readable(user: User, ids: list[str]) -> list[str]:
+    """Keep entity history within the caller's read permissions; non-entity statistics are admin-only."""
+    if user.is_admin:
+        return list(ids)
+    return [
+        entity_id
+        for entity_id in ids
+        if "." in entity_id and ":" not in entity_id and user.permissions.check_entity(entity_id, POLICY_READ)
+    ]
+
+
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "neonplan3d/timetravel/history",
@@ -216,11 +229,12 @@ async def ws_timetravel_history(
         # the cars of every floor plan (a garage of its own is a plan of its own)
         for plan in data.plans.values():
             configured |= car_trackers(hass, plan.building)
-    cars = [e for e in msg["car_trackers"] if e in configured and e not in private]
-    # places and the devices people carry stay out, whatever the frontend asks for
+    user = connection.user
+    cars = readable(user, [e for e in msg["car_trackers"] if e in configured and e not in private])
+    # Places and the devices people carry stay out, as do entities the caller may not read.
     hidden = private_entities(hass, [*msg["entity_ids"], *msg["statistic_ids"]])
-    entity_ids = [e for e in msg["entity_ids"] if e not in hidden]
-    statistic_ids = [e for e in msg["statistic_ids"] if e not in hidden]
+    entity_ids = readable(user, [e for e in msg["entity_ids"] if e not in hidden])
+    statistic_ids = readable(user, [e for e in msg["statistic_ids"] if e not in hidden])
     try:
         result = await instance.async_add_executor_job(collect, hass, start, end, entity_ids, statistic_ids, cars)
     except Exception as err:  # the recorder may fail in many ways (database busy, migrating)

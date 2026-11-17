@@ -8,7 +8,7 @@ import re
 import time
 from typing import Any, NamedTuple
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Context, HomeAssistant
 from homeassistant.util.location import distance as location_distance
 
 from .service import LocateService
@@ -96,6 +96,8 @@ _TEXT = {
         "home": "Zu Hause: {list}.",
         "ring": "{who} klingelt jetzt.",
         "no_ring": "Für {who} ist keine App zum Klingeln eingestellt.",
+        "not_yours": "Du kannst nur deine eigenen Geräte klingeln lassen.",
+        "ring_wait": "{who} hat gerade erst geklingelt.",
     },
     "en": {
         "restricted": "Location is available to admins only.",
@@ -107,8 +109,14 @@ _TEXT = {
         "home": "At home: {list}.",
         "ring": "{who} is ringing now.",
         "no_ring": "No app to ring is set for {who}.",
+        "not_yours": "You can only ring your own devices.",
+        "ring_wait": "{who} rang just now.",
     },
 }
+
+# A device rings at most once in this many seconds, whoever asks.
+RING_COOLDOWN = 30.0
+_rung: dict[str, float] = {}
 
 
 def _norm(text: str) -> str:
@@ -265,12 +273,12 @@ async def async_locate(
     # Ordinary voice navigation belongs to native handlers, even when location is admin-only.
     if not home_query and found is None:
         return None
-    if service.admins_only:
-        user = await hass.auth.async_get_user(user_id) if user_id else None
-        if user is None or not user.is_admin:
-            persons = home_query is not None or bool(found and any(d.get("person") for d in found[1]))
-            return Located(t["restricted"], [], persons)
+    user = await hass.auth.async_get_user(user_id) if user_id and (service.admins_only or ring_query) else None
+    admin = bool(user and user.is_admin)
+    speaker = _speaker(hass, user_id)
     if home_query:
+        if service.admins_only and not admin:
+            return Located(t["restricted"], [], True)
         names: list[str] = []
         rooms: list[str] = []
         done: set[str] = set()
@@ -299,15 +307,26 @@ async def async_locate(
     assert found is not None
     who, devices = found
     if ring_query:
+        if not admin and any(d.get("person") and d.get("person") != speaker for d in devices):
+            return Located(t["not_yours"], [], False)
+        if service.admins_only and not admin and not (speaker and any(d.get("person") == speaker for d in devices)):
+            return Located(t["restricted"], [], False)
         notify = next((d.get("notify") for d in devices if d.get("notify")), None)
         if not notify:
             return Located(t["no_ring"].format(who=who), [], False)
-        await ring(hass, notify, lang)
+        now = time.monotonic()
+        if now - _rung.get(notify, -RING_COOLDOWN) < RING_COOLDOWN:
+            return Located(t["ring_wait"].format(who=who), [], False)
+        _rung[notify] = now
+        await ring(hass, notify, lang, user_id)
         return Located(t["ring"].format(who=who), [], False)
-    return _where(hass, service, who, devices, lang)
+    located = _where(hass, service, who, devices, lang)
+    if service.admins_only and not admin:
+        return Located(t["restricted"], [], located.persons)
+    return located
 
 
-async def ring(hass: HomeAssistant, notify: str, lang: str) -> None:
+async def ring(hass: HomeAssistant, notify: str, lang: str, user_id: str | None = None) -> None:
     """A loud notification through the Home Assistant app (critical on iPhone, alarm channel on Android)."""
     service = notify.removeprefix("notify.")
     message = "NeonPlan sucht dich 🔔" if lang == "de" else "NeonPlan is looking for you 🔔"
@@ -325,4 +344,5 @@ async def ring(hass: HomeAssistant, notify: str, lang: str) -> None:
             },
         },
         blocking=False,
+        context=Context(user_id=user_id),
     )
