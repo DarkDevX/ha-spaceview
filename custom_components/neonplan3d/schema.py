@@ -671,6 +671,7 @@ ROOF_SECTION_SCHEMA = vol.Schema(
         vol.Required("eave_b"): _HEIGHT,
         vol.Optional("pitch_a", default=35): vol.All(vol.Coerce(float), vol.Range(min=0, max=80)),
         vol.Optional("pitch_b", default=35): vol.All(vol.Coerce(float), vol.Range(min=0, max=80)),
+        vol.Optional("pitch_upper"): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=5, max=60))),
         vol.Required("base"): _HEIGHT,
         vol.Optional("overhang", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=2))),
         # the overhang per side set by hand (a, b, u0, u1; None = automatic, #863)
@@ -1016,6 +1017,8 @@ SETTINGS_SCHEMA = vol.Schema(
         # sunlight through the windows as patches on the floor
         vol.Optional("sun_patches", default=True): bool,
         vol.Optional("sun_shadow", default=True): bool,
+        vol.Optional("sky", default=True): bool,
+        vol.Optional("flyin", default=False): bool,
         # what the sun's arc and compass ring stand around: the house (None, default) or the whole plot (#833)
         vol.Optional("sun_arc"): vol.Any(None, vol.In(["house", "plot"])),
         vol.Optional("window_glow", default=True): bool,
