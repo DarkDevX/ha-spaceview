@@ -56,13 +56,27 @@ _PART_FIELDS = {
     "exp",
     "n",
 }
+# Reviewed MIT packs only: exact source IDs and publishers keep attribution explicit.
+_COMMUNITY_PACKS = {
+    "ca01": ("Uwe", "nextfloor.ca01"),
+    "perg01": ("Uwe", "nextfloor.perg01"),
+    "nextfloor.sanitaer_vigour": ("huepfer13", "nextfloor.sanitaer_vigour"),
+}
 
 
 def _spaceview_payload(source: Any) -> dict[str, Any]:
     """Keep the static furniture model and map it to Space View's validated schema."""
     if not isinstance(source, dict) or source.get("format") != "nfpack" or source.get("version") != 1:
         raise PackError("not_a_pack", "unsupported bundled NextFloor pack")
-    if source.get("publisher") != "NextFloor":
+    source_id = source.get("id")
+    publisher = source.get("publisher")
+    community = _COMMUNITY_PACKS.get(source_id) if isinstance(source_id, str) else None
+    if publisher == "NextFloor":
+        pack_id = source_id
+    elif community and publisher == community[0]:
+        # Keep community pack IDs separate from user-installed pack IDs and preserve the credited author.
+        pack_id = community[1]
+    else:
         raise PackError("invalid_content", "unexpected bundled pack publisher")
     if not isinstance(source.get("items"), list):
         raise PackError("invalid_content", "bundled pack items must be a list")
@@ -85,9 +99,9 @@ def _spaceview_payload(source: Any) -> dict[str, Any]:
     payload = {
         "format": "fp3dpack",
         "version": 1,
-        "id": source.get("id"),
+        "id": pack_id,
         "name": source.get("name"),
-        "publisher": "NextFloor",
+        "publisher": publisher,
         "licensee": None,
         "release": source.get("release", 1),
         "description": source.get("description", ""),
